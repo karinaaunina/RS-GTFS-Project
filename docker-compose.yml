@@ -1,0 +1,86 @@
+services:
+  db:
+    image: postgres:15
+    container_name: gtfsrt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gtfs_monitor
+      POSTGRES_USER: gtfs_user
+      POSTGRES_PASSWORD: gtfs_pass
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gtfs_user -d gtfs_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: gtfsrt-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TZ_NAME: "Europe/Riga"
+      DATA_DIR: "/app/data"
+
+      # Static GTFS zip (optional but recommended for route/stop enrichment).
+      STATIC_GTFS_PATH: "/app/static_gtfs.zip"
+
+      # Live feed ingestion
+      AUTO_REFRESH: "true"
+      REFRESH_SECONDS: "5"
+
+      # PostgreSQL persistence
+      DB_ENABLED: "true"
+      DB_STORE_RAW_PB: "true"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_NAME: "gtfs_monitor"
+      DB_USER: "gtfs_user"
+      DB_PASSWORD: "gtfs_pass"
+      DB_SSLMODE: "prefer"
+      DB_QUERY_LIMIT_MAX: "20000"
+      DB_CLEANUP_ENABLED: "true"
+      DB_RETENTION_DAYS: "3"
+      DB_CLEANUP_INTERVAL_MINUTES: "1440"
+
+      # Optional periodic file archiving (keeps existing CSV/Excel workflow intact)
+      ARCHIVE_ENABLED: "false"
+      ARCHIVE_INTERVAL_MINUTES: "30"
+      ARCHIVE_APPEND_SNAPSHOTS: "true"
+      ARCHIVE_WRITE_WORKBOOK: "true"
+      ARCHIVE_FORCE_REFRESH: "true"
+
+      # Debounce / confidence
+      ANOMALY_MISSING_CONSECUTIVE: "2"
+      ANOMALY_MIN_FUTURE_SEC: "30"
+      ANOMALY_NEAR_STOP_METERS: "1200"
+
+      # Override if authentication is required by the feed
+      # GTFS_RT_USER: "..."
+      # GTFS_RT_PASS: "..."
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/static_gtfs.zip:/app/static_gtfs.zip:ro
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: gtfsrt-frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,10 @@
+python-dotenv
+fastapi==0.115.6
+uvicorn[standard]==0.30.6
+pandas==2.2.2
+requests==2.32.3
+protobuf==5.27.3
+gtfs-realtime-bindings==1.0.0
+openpyxl==3.1.5
+
+psycopg2-binary==2.9.10
